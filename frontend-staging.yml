@@ -213,11 +213,11 @@ stages:
     displayName: Deploy to Staging
     dependsOn: Security
     condition: and(
-      succeeded(),
-      or(
-        eq(variables['Build.SourceBranch'], 'refs/heads/staging'),
-        eq(variables['Build.Reason'], 'Manual')
-      )
+        succeeded(),
+        or(
+          eq(variables['Build.SourceBranch'], 'refs/heads/staging'),
+          eq(variables['Build.Reason'], 'Manual')
+        )
       )
     jobs:
       - deployment: FrontendStaging
