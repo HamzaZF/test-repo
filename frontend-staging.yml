@@ -231,12 +231,20 @@ stages:
                   artifact: frontend-dist
                   displayName: Download frontend-dist artifact
 
+                - script: |
+                    echo "Pipeline Workspace: $(Pipeline.Workspace)"
+                    ls -la $(Pipeline.Workspace)
+                    echo "---"
+                    echo "Frontend-dist contents:"
+                    ls -la $(Pipeline.Workspace)/frontend-dist
+                  displayName: Debug - Show artifact structure
+
                 # Deploy the artifact without rebuilding (skip_app_build: true)
                 # AzureStaticWebApp expects a folder path containing the built static assets.
                 - task: AzureStaticWebApp@0
                   displayName: Deploy to Azure Static Web Apps (Staging)
                   inputs:
-                    app_location: '$(Pipeline.Workspace)/frontend-dist/dist'
+                    app_location: '$(Pipeline.Workspace)/frontend-dist'
                     output_location: ''
                     skip_app_build: true
                     azure_static_web_apps_api_token: $(DEPLOYMENT_TOKEN_STATIC_STAGING)
