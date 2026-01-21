@@ -3,7 +3,7 @@
 #
 # Behavior:
 # - PR to staging: Build + Test + Security
-# - Push to staging: Build + Test + Security + Publish Artifact + Deploy to Staging
+# - Push to staging: Build + Test + Security + Deploy to Staging
 
 trigger:
   branches:
@@ -19,11 +19,16 @@ pool:
   vmImage: ubuntu-24.04
 
 variables:
-  NODE_VERSION: '20.x'
+  NODE_VERSION: '20.11.1'
+  PNPM_VERSION: '10.15.1'
+  TRIVY_VERSION: '0.68.2'
+  SEMGREP_VERSION: '1.148.0'
+  GITLEAKS_VERSION: '8.30.0'
+  CDXGEN_VERSION: '12.0.0'
   FRONTEND_APP_LOCATION: 'app'
-  FRONTEND_DIST_LOCATION: 'app/dist'
   PNPM_STORE_PATH: $(Pipeline.Workspace)/.pnpm-store
   CACHE_RESTORED: false
+
 
 stages:
   # -------------------------
@@ -42,7 +47,7 @@ stages:
             inputs:
               versionSpec: $(NODE_VERSION)
 
-          - script: npm install -g pnpm@10.15.1
+          - script: npm install -g pnpm@$(PNPM_VERSION)
             displayName: Install pnpm 10.15.1
 
           - task: Cache@2
@@ -65,7 +70,7 @@ stages:
           - task: PublishPipelineArtifact@1
             displayName: Publish build output (dist) as artifact
             inputs:
-              targetPath: $(FRONTEND_DIST_LOCATION)
+              targetPath: $(FRONTEND_APP_LOCATION)/dist
               artifact: frontend-dist
               publishLocation: pipeline
 
@@ -87,7 +92,7 @@ stages:
             inputs:
               versionSpec: $(NODE_VERSION)
 
-          - script: npm install -g pnpm@10.15.1
+          - script: npm install -g pnpm@$(PNPM_VERSION)
             displayName: Install pnpm 10.15.1
 
           - task: Cache@2
@@ -110,6 +115,7 @@ stages:
           - script: |
               cd $(FRONTEND_APP_LOCATION)
               pnpm run lint
+              # pnpm test
             displayName: Run lint and tests
 
 
@@ -124,13 +130,6 @@ stages:
   - stage: Security
     displayName: Security Scans
     dependsOn: Test
-    condition: and(
-        succeeded(),
-        or(
-          eq(variables['Build.SourceBranch'], 'refs/heads/staging'),
-          eq(variables['Build.Reason'], 'Manual')
-        )
-      )
     jobs:
       - job: Security
         displayName: Run Security Controls
@@ -147,7 +146,7 @@ stages:
             inputs:
               versionSpec: $(NODE_VERSION)
 
-          - script: npm install -g pnpm@10.15.1
+          - script: npm install -g pnpm@$(PNPM_VERSION)
             displayName: Install pnpm 10.15.1
 
           - task: Cache@2
@@ -170,36 +169,73 @@ stages:
           # SAST — Semgrep
           # -------------------------
           - script: |
-              pip install semgrep==1.148.0
+              pip install semgrep==$(SEMGREP_VERSION)
               cd $(FRONTEND_APP_LOCATION)
-              semgrep ci --config auto
+              semgrep ci --config p/ci --severity ERROR --sarif --output semgrep.sarif
             displayName: SAST - Semgrep Scan
 
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Semgrep SARIF
+            inputs:
+              targetPath: $(FRONTEND_APP_LOCATION)/semgrep.sarif
+              artifact: semgrep-sarif
+              publishLocation: pipeline
 
           # -------------------------
-          # SCA — pnpm audit
+          # SCA — Trivy
           # -------------------------
           - script: |
+              wget -q https://github.com/aquasecurity/trivy/releases/download/v$(TRIVY_VERSION)/trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
+              tar -xzf trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
+              sudo mv trivy /usr/local/bin/trivy
+              sudo chmod +x /usr/local/bin/trivy
+
               cd $(FRONTEND_APP_LOCATION)
-              pnpm audit --audit-level high
-            displayName: SCA - pnpm audit
+
+              trivy fs \
+                --severity HIGH,CRITICAL \
+                --format json \
+                --output trivy-results.json \
+                --exit-code 1 \
+                --no-progress \
+                .
+            displayName: SCA - Trivy Filesystem Scan
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Trivy SCA Report
+            inputs:
+              targetPath: $(FRONTEND_APP_LOCATION)/trivy-results.json
+              artifact: trivy-sca
+              publishLocation: pipeline
 
           # -------------------------
           # Secrets Scanning — Gitleaks
           # -------------------------
           - script: |
-              wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz
-              tar -xzf gitleaks_8.30.0_linux_x64.tar.gz
+              wget -q https://github.com/gitleaks/gitleaks/releases/download/v$(GITLEAKS_VERSION)/gitleaks_$(GITLEAKS_VERSION)_linux_x64.tar.gz
+              tar -xzf gitleaks_$(GITLEAKS_VERSION)_linux_x64.tar.gz
               sudo mv gitleaks /usr/local/bin/gitleaks
-              gitleaks detect --source . --redact --exit-code 1
+
+              gitleaks detect \
+              --source $(Build.SourcesDirectory) \
+              --report-format json \
+              --report-path gitleaks-report.json \
+              --redact \
+              --exit-code 1
             displayName: Secrets Scan - Gitleaks
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Gitleaks Report
+            inputs:
+              targetPath: gitleaks-report.json
+              artifact: gitleaks-report
 
           # -------------------------
           # SBOM — CycloneDX (cdxgen)
           # -------------------------
           - script: |
               cd $(FRONTEND_APP_LOCATION)
-              npm install -g @cyclonedx/cdxgen@12.0.0
+              npm install -g @cyclonedx/cdxgen@$(CDXGEN_VERSION)
               cdxgen -o sbom.json
             displayName: Generate SBOM
 
