@@ -188,13 +188,14 @@ stages:
             displayName: Secrets Scan - Gitleaks
 
           # -------------------------
-          # SBOM — CycloneDX for npm/pnpm
+          # SBOM — CycloneDX (cdxgen)
           # -------------------------
           - script: |
               cd $(FRONTEND_APP_LOCATION)
-              npx @cyclonedx/cyclonedx-npm --output-file sbom.json
+              npm install -g @cyclonedx/cdxgen@12.0.0
+              cdxgen -o sbom.json
+            displayName: Generate SBOM
 
-            displayName: Generate SBOM (CycloneDX)
 
           # Publish SBOM artifact
           - task: PublishPipelineArtifact@1
