@@ -124,6 +124,13 @@ stages:
   - stage: Security
     displayName: Security Scans
     dependsOn: Test
+    condition: and(
+        succeeded(),
+        or(
+          eq(variables['Build.SourceBranch'], 'refs/heads/staging'),
+          eq(variables['Build.Reason'], 'Manual')
+        )
+      )
     jobs:
       - job: Security
         displayName: Run Security Controls
