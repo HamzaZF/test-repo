@@ -1,0 +1,172 @@
+# frontend-staging.yml
+# Kelix Frontend — Staging CI/CD (PR validation + staging deploy)
+#
+# Behavior:
+# - PR to staging: Build + Test + Security
+# - Push to staging: Build + Test + Security + Publish Artifact + Deploy to Staging
+
+trigger:
+  branches:
+    include:
+      - staging
+
+pr:
+  branches:
+    include:
+      - staging
+
+pool:
+  vmImage: ubuntu-24.04
+
+variables:
+  NODE_VERSION: '18.x'
+  FRONTEND_APP_LOCATION: 'app'
+  FRONTEND_DIST_LOCATION: 'app/dist'
+
+stages:
+  # -------------------------
+  # Stage 1 — Build (CI Build)
+  # -------------------------
+  - stage: Build
+    displayName: Build
+    jobs:
+      - job: Build
+        displayName: Build Frontend
+        steps:
+          - checkout: self
+
+          - task: NodeTool@0
+            displayName: Use Node.js $(NODE_VERSION)
+            inputs:
+              versionSpec: $(NODE_VERSION)
+
+          - script: npm install -g pnpm
+            displayName: Install pnpm
+
+          - script: |
+              cd $(FRONTEND_APP_LOCATION)
+              pnpm install --frozen-lockfile
+              pnpm run build
+            displayName: Install dependencies and build
+
+          # Publish build output for downstream stages (required because stages run on fresh agents)
+          - task: PublishPipelineArtifact@1
+            displayName: Publish build output (dist) as artifact
+            inputs:
+              targetPath: $(FRONTEND_DIST_LOCATION)
+              artifact: frontend-dist
+              publishLocation: pipeline
+
+  # -------------------------
+  # Stage 2 — Test (CI Quality Gate)
+  # -------------------------
+  - stage: Test
+    displayName: Test
+    dependsOn: Build
+    jobs:
+      - job: Test
+        displayName: Lint and Tests
+        steps:
+          - checkout: self
+
+          - task: NodeTool@0
+            displayName: Use Node.js $(NODE_VERSION)
+            inputs:
+              versionSpec: $(NODE_VERSION)
+
+          - script: npm install -g pnpm
+            displayName: Install pnpm
+
+          - script: |
+              cd $(FRONTEND_APP_LOCATION)
+              pnpm install --frozen-lockfile
+              pnpm run lint
+              # pnpm run test  # enable if/when unit tests exist
+            displayName: Run lint and tests
+
+  # -------------------------
+  # Stage 3 — Security (Shift-left Security)
+  #   - SAST (static code analysis)
+  #   - SCA (dependency/vulnerability scanning)
+  #   - Secrets scanning
+  #   - SBOM generation
+  # -------------------------
+  - stage: Security
+    displayName: Security Scans
+    dependsOn: Test
+    jobs:
+      - job: Security
+        displayName: Run Security Controls
+        steps:
+          - checkout: self
+
+          # (Optional) Download build output for tooling that inspects the built bundle
+          - download: current
+            artifact: frontend-dist
+            displayName: Download build artifact (dist)
+
+          # SAST — Static Application Security Testing
+          # Typical tools: SonarQube/SonarCloud, Semgrep
+          - script: |
+              echo "TODO: Run SAST (e.g., SonarCloud or Semgrep) against the frontend source."
+              # Example (Semgrep): semgrep ci --config auto
+            displayName: SAST Scan
+
+          # SCA — Software Composition Analysis (dependency vulnerability scanning)
+          # Typical tools: Snyk, OWASP Dependency-Check
+          - script: |
+              echo "TODO: Run SCA (e.g., Snyk) to detect vulnerable npm/pnpm dependencies."
+              # Example (Snyk): snyk test --severity-threshold=high
+            displayName: SCA Scan
+
+          # Secrets scanning — prevent committed tokens/keys
+          # Typical tools: Gitleaks, TruffleHog
+          - script: |
+              echo "TODO: Run secrets scan (e.g., gitleaks) against the repository."
+              # Example (Gitleaks): gitleaks detect --source . --redact
+            displayName: Secrets Scan
+
+          # SBOM — Software Bill of Materials for supply chain visibility
+          # Typical tools: CycloneDX (npm), Syft
+          - script: |
+              echo "TODO: Generate SBOM (CycloneDX/Syft) and publish as artifact."
+              # Example (CycloneDX): npx @cyclonedx/cyclonedx-npm --output-file sbom.json
+            displayName: Generate SBOM
+
+          # Optional: publish SBOM artifact (enable when SBOM generation is implemented)
+          # - task: PublishPipelineArtifact@1
+          #   displayName: Publish SBOM
+          #   inputs:
+          #     targetPath: sbom.json
+          #     artifact: sbom
+          #     publishLocation: pipeline
+
+  # -------------------------
+  # Stage 4 — Deploy to Staging (CD Non-Prod)
+  # -------------------------
+  - stage: Deploy_Staging
+    displayName: Deploy to Staging
+    dependsOn: Security
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/staging'))
+    jobs:
+      - deployment: FrontendStaging
+        displayName: Frontend - Deploy to Kelix Staging
+        environment: Kelix-Staging
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: frontend-dist
+                  displayName: Download frontend-dist artifact
+
+                # Deploy the artifact without rebuilding (skip_app_build: true)
+                # AzureStaticWebApp expects a folder path containing the built static assets.
+                - task: AzureStaticWebApp@0
+                  displayName: Deploy to Azure Static Web Apps (Staging)
+                  inputs:
+                    app_location: '$(Pipeline.Workspace)/frontend-dist'
+                    output_location: ''
+                    skip_app_build: true
+                    azure_static_web_apps_api_token: $(DEPLOYMENT_TOKEN_STATIC_STAGING)
+
