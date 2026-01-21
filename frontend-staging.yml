@@ -19,7 +19,7 @@ pool:
   vmImage: ubuntu-24.04
 
 variables:
-  NODE_VERSION: '18.x'
+  NODE_VERSION: '20.x'
   FRONTEND_APP_LOCATION: 'app'
   FRONTEND_DIST_LOCATION: 'app/dist'
 
