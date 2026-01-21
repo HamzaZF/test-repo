@@ -192,7 +192,8 @@ stages:
           # -------------------------
           - script: |
               cd $(FRONTEND_APP_LOCATION)
-              npx @cyclonedx/cyclonedx-pnpm --output-file sbom.json
+              npx @cyclonedx/cyclonedx-npm --output-file sbom.json
+
             displayName: Generate SBOM (CycloneDX)
 
           # Publish SBOM artifact
