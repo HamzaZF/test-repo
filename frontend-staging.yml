@@ -171,7 +171,7 @@ stages:
           - script: |
               pip install semgrep==$(SEMGREP_VERSION)
               cd $(FRONTEND_APP_LOCATION)
-              semgrep ci --config p/ci --severity ERROR --sarif --output semgrep.sarif
+              semgrep scan --config p/ci --severity ERROR --sarif --output semgrep.sarif
             displayName: SAST - Semgrep Scan
 
           - task: PublishPipelineArtifact@1
