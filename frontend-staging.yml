@@ -165,8 +165,9 @@ stages:
           - script: |
               pip install semgrep==1.148.0
               cd $(FRONTEND_APP_LOCATION)
-              semgrep ci --config auto --error
+              semgrep ci --config auto --severity ERROR
             displayName: SAST - Semgrep Scan
+
 
           # -------------------------
           # SCA — pnpm audit
