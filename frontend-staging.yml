@@ -19,7 +19,7 @@ pool:
   vmImage: ubuntu-24.04
 
 variables:
-  NODE_VERSION: '20.11.1'
+  NODE_VERSION: '24.13.0'
   PNPM_VERSION: '10.15.1'
   TRIVY_VERSION: '0.68.2'
   SEMGREP_VERSION: '1.148.0'
