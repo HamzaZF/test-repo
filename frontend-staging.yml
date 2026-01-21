@@ -165,7 +165,7 @@ stages:
           - script: |
               pip install semgrep==1.148.0
               cd $(FRONTEND_APP_LOCATION)
-              semgrep ci --config auto --severity ERROR
+              semgrep ci --config auto
             displayName: SAST - Semgrep Scan
 
 
