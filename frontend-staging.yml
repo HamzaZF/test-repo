@@ -22,6 +22,8 @@ variables:
   NODE_VERSION: '20.x'
   FRONTEND_APP_LOCATION: 'app'
   FRONTEND_DIST_LOCATION: 'app/dist'
+  PNPM_STORE_PATH: $(Pipeline.Workspace)/.pnpm-store
+  CACHE_RESTORED: false
 
 stages:
   # -------------------------
@@ -40,8 +42,18 @@ stages:
             inputs:
               versionSpec: $(NODE_VERSION)
 
-          - script: npm install -g pnpm
-            displayName: Install pnpm
+          - script: npm install -g pnpm@10.15.1
+            displayName: Install pnpm 10.15.1
+
+          - task: Cache@2
+            inputs:
+              key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
+              path: $(PNPM_STORE_PATH)
+              cacheHitVar: CACHE_RESTORED
+
+          - script: |
+              pnpm config set store-dir $(PNPM_STORE_PATH)
+            displayName: Configure pnpm store
 
           - script: |
               cd $(FRONTEND_APP_LOCATION)
@@ -49,13 +61,14 @@ stages:
               pnpm run build
             displayName: Install dependencies and build
 
-          # Publish build output for downstream stages (required because stages run on fresh agents)
+          # Publish build output
           - task: PublishPipelineArtifact@1
             displayName: Publish build output (dist) as artifact
             inputs:
               targetPath: $(FRONTEND_DIST_LOCATION)
               artifact: frontend-dist
               publishLocation: pipeline
+
 
   # -------------------------
   # Stage 2 — Test (CI Quality Gate)
@@ -74,23 +87,40 @@ stages:
             inputs:
               versionSpec: $(NODE_VERSION)
 
-          - script: npm install -g pnpm
-            displayName: Install pnpm
+          - script: npm install -g pnpm@10.15.1
+            displayName: Install pnpm 10.15.1
+
+          - task: Cache@2
+            displayName: Restore pnpm store cache
+            inputs:
+              key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
+              path: $(PNPM_STORE_PATH)
+              cacheHitVar: CACHE_RESTORED
+
+          - script: |
+              pnpm config set store-dir $(PNPM_STORE_PATH)
+            displayName: Configure pnpm store
 
           - script: |
               cd $(FRONTEND_APP_LOCATION)
               pnpm install --frozen-lockfile
+            displayName: Install dependencies
+
+
+          - script: |
+              cd $(FRONTEND_APP_LOCATION)
               pnpm run lint
-              # pnpm run test  # enable if/when unit tests exist
             displayName: Run lint and tests
+
 
   # -------------------------
   # Stage 3 — Security (Shift-left Security)
-  #   - SAST (static code analysis)
-  #   - SCA (dependency/vulnerability scanning)
+  #   - SAST (Static Application Security Testing)
+  #   - SCA (Software Composition Analysis -> dependency/vulnerability scanning)
   #   - Secrets scanning
   #   - SBOM generation
   # -------------------------
+ 
   - stage: Security
     displayName: Security Scans
     dependsOn: Test
@@ -100,50 +130,82 @@ stages:
         steps:
           - checkout: self
 
-          # (Optional) Download build output for tooling that inspects the built bundle
-          - download: current
-            artifact: frontend-dist
-            displayName: Download build artifact (dist)
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.x'
 
-          # SAST — Static Application Security Testing
-          # Typical tools: SonarQube/SonarCloud, Semgrep
+          # Use same Node version
+          - task: NodeTool@0
+            displayName: Use Node.js $(NODE_VERSION)
+            inputs:
+              versionSpec: $(NODE_VERSION)
+
+          - script: npm install -g pnpm@10.15.1
+            displayName: Install pnpm 10.15.1
+
+          - task: Cache@2
+            displayName: Restore pnpm store cache
+            inputs:
+              key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
+              path: $(PNPM_STORE_PATH)
+              cacheHitVar: CACHE_RESTORED
+
           - script: |
-              echo "TODO: Run SAST (e.g., SonarCloud or Semgrep) against the frontend source."
-              # Example (Semgrep): semgrep ci --config auto
-            displayName: SAST Scan
+              pnpm config set store-dir $(PNPM_STORE_PATH)
+            displayName: Configure pnpm store
 
-          # SCA — Software Composition Analysis (dependency vulnerability scanning)
-          # Typical tools: Snyk, OWASP Dependency-Check
           - script: |
-              echo "TODO: Run SCA (e.g., Snyk) to detect vulnerable npm/pnpm dependencies."
-              # Example (Snyk): snyk test --severity-threshold=high
-            displayName: SCA Scan
+              cd $(FRONTEND_APP_LOCATION)
+              pnpm install --frozen-lockfile
+            displayName: Install dependencies
 
-          # Secrets scanning — prevent committed tokens/keys
-          # Typical tools: Gitleaks, TruffleHog
+          # -------------------------
+          # SAST — Semgrep
+          # -------------------------
           - script: |
-              echo "TODO: Run secrets scan (e.g., gitleaks) against the repository."
-              # Example (Gitleaks): gitleaks detect --source . --redact
-            displayName: Secrets Scan
+              pip install semgrep==1.148.0
+              cd $(FRONTEND_APP_LOCATION)
+              semgrep ci --config auto --error
+            displayName: SAST - Semgrep Scan
 
-          # SBOM — Software Bill of Materials for supply chain visibility
-          # Typical tools: CycloneDX (npm), Syft
+          # -------------------------
+          # SCA — pnpm audit
+          # -------------------------
           - script: |
-              echo "TODO: Generate SBOM (CycloneDX/Syft) and publish as artifact."
-              # Example (CycloneDX): npx @cyclonedx/cyclonedx-npm --output-file sbom.json
-            displayName: Generate SBOM
+              cd $(FRONTEND_APP_LOCATION)
+              pnpm audit --audit-level high
+            displayName: SCA - pnpm audit
 
-          # Optional: publish SBOM artifact (enable when SBOM generation is implemented)
-          # - task: PublishPipelineArtifact@1
-          #   displayName: Publish SBOM
-          #   inputs:
-          #     targetPath: sbom.json
-          #     artifact: sbom
-          #     publishLocation: pipeline
+          # -------------------------
+          # Secrets Scanning — Gitleaks
+          # -------------------------
+          - script: |
+              wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.30.0/gitleaks_8.30.0_linux_x64.tar.gz
+              tar -xzf gitleaks_8.30.0_linux_x64.tar.gz
+              sudo mv gitleaks /usr/local/bin/gitleaks
+              gitleaks detect --source . --redact --exit-code 1
+            displayName: Secrets Scan - Gitleaks
+
+          # -------------------------
+          # SBOM — CycloneDX for npm/pnpm
+          # -------------------------
+          - script: |
+              cd $(FRONTEND_APP_LOCATION)
+              npx @cyclonedx/cyclonedx-pnpm --output-file sbom.json
+            displayName: Generate SBOM (CycloneDX)
+
+          # Publish SBOM artifact
+          - task: PublishPipelineArtifact@1
+            displayName: Publish SBOM
+            inputs:
+              targetPath: $(FRONTEND_APP_LOCATION)/sbom.json
+              artifact: sbom
+              publishLocation: pipeline
 
   # -------------------------
   # Stage 4 — Deploy to Staging (CD Non-Prod)
   # -------------------------
+
   - stage: Deploy_Staging
     displayName: Deploy to Staging
     dependsOn: Security
@@ -165,7 +227,7 @@ stages:
                 - task: AzureStaticWebApp@0
                   displayName: Deploy to Azure Static Web Apps (Staging)
                   inputs:
-                    app_location: '$(Pipeline.Workspace)/frontend-dist'
+                    app_location: '$(Pipeline.Workspace)/frontend-dist/app/dist'
                     output_location: ''
                     skip_app_build: true
                     azure_static_web_apps_api_token: $(DEPLOYMENT_TOKEN_STATIC_STAGING)
