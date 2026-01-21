@@ -82,8 +82,12 @@ stages:
     displayName: Test
     dependsOn: Build
     jobs:
-      - job: Test
-        displayName: Lint and Tests
+
+      # -------------------------
+      # Job 1 — unit and lint tests
+      # -------------------------
+      - job: UnitAndLint
+        displayName: Lint and Unit Tests
         steps:
           - checkout: self
 
@@ -93,7 +97,7 @@ stages:
               versionSpec: $(NODE_VERSION)
 
           - script: npm install -g pnpm@$(PNPM_VERSION)
-            displayName: Install pnpm 10.15.1
+            displayName: Install pnpm
 
           - task: Cache@2
             displayName: Restore pnpm store cache
@@ -111,13 +115,65 @@ stages:
               pnpm install --frozen-lockfile
             displayName: Install dependencies
 
-
           - script: |
               cd $(FRONTEND_APP_LOCATION)
               pnpm run lint
               # pnpm test
-            displayName: Run lint and tests
+            displayName: Run lint and unit tests
 
+
+      # -------------------------
+      # Job 2 — Playwright E2E
+      # -------------------------
+      - job: Playwright
+        displayName: Playwright E2E Tests
+        dependsOn: UnitAndLint
+        condition: eq(variables['Build.SourceBranch'], 'refs/heads/staging')
+
+        steps:
+          - checkout: self
+
+          - task: NodeTool@0
+            displayName: Use Node.js $(NODE_VERSION)
+            inputs:
+              versionSpec: $(NODE_VERSION)
+
+          - script: npm install -g pnpm@$(PNPM_VERSION)
+            displayName: Install pnpm
+
+          - task: Cache@2
+            displayName: Restore pnpm store cache
+            inputs:
+              key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
+              path: $(PNPM_STORE_PATH)
+              cacheHitVar: CACHE_RESTORED
+
+          - script: |
+              pnpm config set store-dir $(PNPM_STORE_PATH)
+            displayName: Configure pnpm store
+
+          - script: |
+              cd $(FRONTEND_APP_LOCATION)
+              pnpm install --frozen-lockfile
+            displayName: Install dependencies
+
+          - script: |
+              cd $(FRONTEND_APP_LOCATION)
+              pnpm exec playwright install --with-deps
+            displayName: Install Playwright browsers
+
+          - script: |
+              cd $(FRONTEND_APP_LOCATION)
+              pnpm exec playwright test
+            displayName: Run Playwright tests
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Playwright Report
+            condition: always()
+            inputs:
+              targetPath: $(FRONTEND_APP_LOCATION)/playwright-report
+              artifact: playwright-report
+              publishLocation: pipeline
 
   # -------------------------
   # Stage 3 — Security (Shift-left Security)
@@ -171,7 +227,7 @@ stages:
           - script: |
               pip install semgrep==$(SEMGREP_VERSION)
               cd $(FRONTEND_APP_LOCATION)
-              semgrep scan --config p/ci --severity ERROR --sarif --output semgrep.sarif
+              semgrep scan --config p/ci --severity ERROR --exit-code 1 --sarif --output semgrep.sarif
             displayName: SAST - Semgrep Scan
 
           - task: PublishPipelineArtifact@1
@@ -217,7 +273,7 @@ stages:
               sudo mv gitleaks /usr/local/bin/gitleaks
 
               gitleaks detect \
-              --source $(Build.SourcesDirectory) \
+              --source $(Build.SourcesDirectory)/$(FRONTEND_APP_LOCATION) \
               --report-format json \
               --report-path gitleaks-report.json \
               --redact \
