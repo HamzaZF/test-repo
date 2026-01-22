@@ -25,7 +25,7 @@ variables:
   SEMGREP_VERSION: '1.148.0'
   GITLEAKS_VERSION: '8.30.0'
   CDXGEN_VERSION: '12.0.0'
-  PYTHON_VERSION: '3.14.2'
+  PYTHON_VERSION: '3.12'
   FRONTEND_APP_LOCATION: 'app'
   PNPM_STORE_PATH: $(Pipeline.Workspace)/.pnpm-store
   CACHE_RESTORED: false
@@ -57,6 +57,8 @@ stages:
           - task: Cache@2
             inputs:
               key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
+              restoreKeys: |
+                pnpm | "$(Agent.OS)"
               path: $(PNPM_STORE_PATH)
               cacheHitVar: CACHE_RESTORED
 
@@ -75,6 +77,7 @@ stages:
               publishLocation: pipeline
 
 
+
   # -------------------------
   # Stage 2 — Test (CI Quality Gate)
   # -------------------------
@@ -84,7 +87,7 @@ stages:
     jobs:
 
       # -------------------------
-      # Job 1 — unit and lint tests
+      #  Lint and Unit Tests
       # -------------------------
       - job: UnitAndLint
         displayName: Lint and Unit Tests
@@ -96,84 +99,40 @@ stages:
             inputs:
               versionSpec: $(NODE_VERSION)
 
-          - script: npm install -g pnpm@$(PNPM_VERSION)
-            displayName: Install pnpm
+          # Install pnpm
+          - script: |
+              npm install -g pnpm@$(PNPM_VERSION)
+              pnpm --version
+            displayName: Install pnpm $(PNPM_VERSION)
 
+          # Configure pnpm store
           - script: |
               pnpm config set store-dir $(PNPM_STORE_PATH)
+              pnpm config get store-dir
             displayName: Configure pnpm store
 
+          # Restore pnpm cache
           - task: Cache@2
             displayName: Restore pnpm store cache
             inputs:
               key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
+              restoreKeys: |
+                pnpm | "$(Agent.OS)"
               path: $(PNPM_STORE_PATH)
               cacheHitVar: CACHE_RESTORED
 
+          # Install dependencies
           - script: |
               cd $(FRONTEND_APP_LOCATION)
               pnpm install --frozen-lockfile
             displayName: Install dependencies
 
+          # lint + unit tests
           - script: |
               cd $(FRONTEND_APP_LOCATION)
-              pnpm run lint
-              # pnpm test
+              pnpm run lint -- --max-warnings=0
+              # pnpm test -- --ci
             displayName: Run lint and unit tests
-
-
-      # # -------------------------
-      # # Job 2 — Playwright E2E
-      # # -------------------------
-      # - job: Playwright
-      #   displayName: Playwright E2E Tests
-      #   dependsOn: UnitAndLint
-      #   condition: eq(variables['Build.SourceBranch'], 'refs/heads/staging')
-
-      #   steps:
-      #     - checkout: self
-
-      #     - task: NodeTool@0
-      #       displayName: Use Node.js $(NODE_VERSION)
-      #       inputs:
-      #         versionSpec: $(NODE_VERSION)
-
-      #     - script: npm install -g pnpm@$(PNPM_VERSION)
-      #       displayName: Install pnpm
-
-      #     - script: |
-      #         pnpm config set store-dir $(PNPM_STORE_PATH)
-      #       displayName: Configure pnpm store
-
-      #     - task: Cache@2
-      #       displayName: Restore pnpm store cache
-      #       inputs:
-      #         key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
-      #         path: $(PNPM_STORE_PATH)
-      #         cacheHitVar: CACHE_RESTORED
-
-      #     - script: |
-      #         cd $(FRONTEND_APP_LOCATION)
-      #         pnpm install --frozen-lockfile
-      #       displayName: Install dependencies
-
-      #     - script: |
-      #         cd $(FRONTEND_APP_LOCATION)
-      #         pnpm exec playwright install --with-deps
-      #       displayName: Install Playwright browsers
-
-      #     - script: |
-      #         cd $(FRONTEND_APP_LOCATION)
-      #         pnpm exec playwright test
-      #       displayName: Run Playwright tests
-
-      #     - task: PublishPipelineArtifact@1
-      #       displayName: Publish Playwright Report
-      #       condition: always()
-      #       inputs:
-      #         targetPath: $(FRONTEND_APP_LOCATION)/playwright-report
-      #         artifact: playwright-report
-      #         publishLocation: pipeline
 
   # -------------------------
   # Stage 3 — Security (Shift-left Security)
@@ -212,6 +171,8 @@ stages:
             displayName: Restore pnpm store cache
             inputs:
               key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
+              restoreKeys: |
+                pnpm | "$(Agent.OS)"
               path: $(PNPM_STORE_PATH)
               cacheHitVar: CACHE_RESTORED
 
@@ -234,33 +195,6 @@ stages:
             inputs:
               targetPath: $(FRONTEND_APP_LOCATION)/semgrep.sarif
               artifact: semgrep-sarif
-              publishLocation: pipeline
-
-          # -------------------------
-          # SCA — Trivy
-          # -------------------------
-          - script: |
-              wget -q https://github.com/aquasecurity/trivy/releases/download/v$(TRIVY_VERSION)/trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
-              tar -xzf trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
-              sudo mv trivy /usr/local/bin/trivy
-              sudo chmod +x /usr/local/bin/trivy
-
-              cd $(FRONTEND_APP_LOCATION)
-
-              trivy fs \
-                --severity HIGH,CRITICAL \
-                --format json \
-                --output trivy-results.json \
-                --exit-code 1 \
-                --no-progress \
-                .
-            displayName: SCA - Trivy Filesystem Scan
-
-          - task: PublishPipelineArtifact@1
-            displayName: Publish Trivy SCA Report
-            inputs:
-              targetPath: $(FRONTEND_APP_LOCATION)/trivy-results.json
-              artifact: trivy-sca
               publishLocation: pipeline
 
           # -------------------------
@@ -294,6 +228,24 @@ stages:
               cdxgen -o sbom.json
             displayName: Generate SBOM
 
+          # -------------------------
+          # SCA — Trivy (Scan SBOM)
+          # -------------------------
+          - script: |
+              wget -q https://github.com/aquasecurity/trivy/releases/download/v$(TRIVY_VERSION)/trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
+              tar -xzf trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
+              sudo mv trivy /usr/local/bin/trivy
+              sudo chmod +x /usr/local/bin/trivy
+
+              cd $(FRONTEND_APP_LOCATION)
+
+              trivy sbom \
+                --severity HIGH,CRITICAL \
+                --exit-code 1 \
+                --format json \
+                --output trivy-sbom.json \
+                sbom.json
+            displayName: SCA - Trivy SBOM Scan
 
           # Publish SBOM artifact
           - task: PublishPipelineArtifact@1
@@ -302,6 +254,15 @@ stages:
               targetPath: $(FRONTEND_APP_LOCATION)/sbom.json
               artifact: sbom
               publishLocation: pipeline
+
+          # Publish Trivy SCA Report
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Trivy SCA Report
+            inputs:
+              targetPath: $(FRONTEND_APP_LOCATION)/trivy-sbom.json
+              artifact: trivy-sca
+              publishLocation: pipeline
+
 
   # -------------------------
   # Stage 4 — Deploy to Staging (CD Non-Prod)
