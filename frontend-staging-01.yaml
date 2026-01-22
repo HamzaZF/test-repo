@@ -1,0 +1,43 @@
+trigger:
+  branches:
+    include:
+      - staging
+
+pool:
+  vmImage: ubuntu-24.04
+
+stages:
+  - stage: Build
+    displayName: Build
+    jobs:
+      - job: Build_Image
+        displayName: Building container image
+        
+      - job: Compile_Code
+        displayName: Compiling code
+      - job: Unit_Tests
+        displayName: Unit testing
+      - job: Code_Coverage
+
+  - stage: Test
+    displayName: Test
+    jobs:
+      - job: Integration_Tests
+        displayName: Integration testing
+
+  - stage: Security
+    displayName: Security
+    jobs:
+      - job: SAST
+        displayName: SAST (Static Application Security Testing)
+      - job: SCA
+        displayName: SCA (Software Composition Analysis)
+      - job: Secret_Scanning
+        displayName: Secret Scanning
+      - job: SBOM
+        displayName: Software Bill of Materials
+
+  - stage: Release
+    jobs:
+      - job: SWA_Deployment
+        displayName: Azure Static Web App Deployment
