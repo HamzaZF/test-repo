@@ -10,10 +10,7 @@ trigger:
     include:
       - staging
 
-pr:
-  branches:
-    include:
-      - staging
+pr: none
 
 pool:
   vmImage: ubuntu-24.04
@@ -28,6 +25,7 @@ variables:
   PYTHON_VERSION: '3.12'
   FRONTEND_APP_LOCATION: 'app'
   PNPM_STORE_PATH: $(Pipeline.Workspace)/.pnpm-store
+  TRIVY_CACHE_DIR: $(Pipeline.Workspace)/.trivy
   CACHE_RESTORED: false
 
 stages:
@@ -65,6 +63,8 @@ stages:
           - script: |
               cd $(FRONTEND_APP_LOCATION)
               pnpm install --frozen-lockfile
+              pnpm run lint -- --max-warnings=0
+              # pnpm test
               pnpm run build
             displayName: Install dependencies and build
 
@@ -85,54 +85,8 @@ stages:
     displayName: Test
     dependsOn: Build
     jobs:
-
-      # -------------------------
-      #  Lint and Unit Tests
-      # -------------------------
-      - job: UnitAndLint
-        displayName: Lint and Unit Tests
-        steps:
-          - checkout: self
-
-          - task: NodeTool@0
-            displayName: Use Node.js $(NODE_VERSION)
-            inputs:
-              versionSpec: $(NODE_VERSION)
-
-          # Install pnpm
-          - script: |
-              npm install -g pnpm@$(PNPM_VERSION)
-              pnpm --version
-            displayName: Install pnpm $(PNPM_VERSION)
-
-          # Configure pnpm store
-          - script: |
-              pnpm config set store-dir $(PNPM_STORE_PATH)
-              pnpm config get store-dir
-            displayName: Configure pnpm store
-
-          # Restore pnpm cache
-          - task: Cache@2
-            displayName: Restore pnpm store cache
-            inputs:
-              key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
-              restoreKeys: |
-                pnpm | "$(Agent.OS)"
-              path: $(PNPM_STORE_PATH)
-              cacheHitVar: CACHE_RESTORED
-
-          # Install dependencies
-          - script: |
-              cd $(FRONTEND_APP_LOCATION)
-              pnpm install --frozen-lockfile
-            displayName: Install dependencies
-
-          # lint + unit tests
-          - script: |
-              cd $(FRONTEND_APP_LOCATION)
-              pnpm run lint -- --max-warnings=0
-              # pnpm test -- --ci
-            displayName: Run lint and unit tests
+      - job: IntegrationTests
+        displayName: Integration Testing
 
   # -------------------------
   # Stage 3 — Security (Shift-left Security)
@@ -141,7 +95,6 @@ stages:
   #   - Secrets scanning
   #   - SBOM generation
   # -------------------------
- 
   - stage: Security
     displayName: Security Scans
     dependsOn: Test
@@ -187,7 +140,7 @@ stages:
           - script: |
               pip install semgrep==$(SEMGREP_VERSION)
               cd $(FRONTEND_APP_LOCATION)
-              semgrep scan --config p/ci --severity ERROR --exit-code 1 --sarif --output semgrep.sarif
+              semgrep --config=p/default --error --sarif --output semgrep.sarif
             displayName: SAST - Semgrep Scan
 
           - task: PublishPipelineArtifact@1
@@ -205,19 +158,22 @@ stages:
               tar -xzf gitleaks_$(GITLEAKS_VERSION)_linux_x64.tar.gz
               sudo mv gitleaks /usr/local/bin/gitleaks
 
-              gitleaks detect \
-              --source $(Build.SourcesDirectory)/$(FRONTEND_APP_LOCATION) \
-              --report-format json \
-              --report-path gitleaks-report.json \
-              --redact \
-              --exit-code 1
+              gitleaks dir \
+                $(Build.SourcesDirectory)/$(FRONTEND_APP_LOCATION) \
+                --no-git \
+                --report-format sarif \
+                --report-path gitleaks.sarif \
+                --redact \
+                --exit-code 1
+
+
             displayName: Secrets Scan - Gitleaks
 
           - task: PublishPipelineArtifact@1
             displayName: Publish Gitleaks Report
             inputs:
-              targetPath: gitleaks-report.json
-              artifact: gitleaks-report
+              targetPath: gitleaks.sarif
+              artifact: gitleaks-sarif
 
           # -------------------------
           # SBOM — CycloneDX (cdxgen)
@@ -228,25 +184,6 @@ stages:
               cdxgen -o sbom.json
             displayName: Generate SBOM
 
-          # -------------------------
-          # SCA — Trivy (Scan SBOM)
-          # -------------------------
-          - script: |
-              wget -q https://github.com/aquasecurity/trivy/releases/download/v$(TRIVY_VERSION)/trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
-              tar -xzf trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
-              sudo mv trivy /usr/local/bin/trivy
-              sudo chmod +x /usr/local/bin/trivy
-
-              cd $(FRONTEND_APP_LOCATION)
-
-              trivy sbom \
-                --severity HIGH,CRITICAL \
-                --exit-code 1 \
-                --format json \
-                --output trivy-sbom.json \
-                sbom.json
-            displayName: SCA - Trivy SBOM Scan
-
           # Publish SBOM artifact
           - task: PublishPipelineArtifact@1
             displayName: Publish SBOM
@@ -254,6 +191,39 @@ stages:
               targetPath: $(FRONTEND_APP_LOCATION)/sbom.json
               artifact: sbom
               publishLocation: pipeline
+
+          # -------------------------
+          # SCA — Trivy (Scan SBOM)
+          # -------------------------
+
+          - task: Cache@2
+            displayName: Restore Trivy cache
+            inputs:
+              key: 'trivy | "$(Agent.OS)" | v$(TRIVY_VERSION)'
+              restoreKeys: |
+                trivy | "$(Agent.OS)"
+              path: $(TRIVY_CACHE_DIR)
+            
+          - script: |
+              # wget -q https://github.com/aquasecurity/trivy/releases/download/v$(TRIVY_VERSION)/trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
+              # tar -xzf trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
+              # sudo mv trivy /usr/local/bin/trivy
+              # sudo chmod +x /usr/local/bin/trivy
+
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin v$(TRIVY_VERSION)
+
+              cd $(FRONTEND_APP_LOCATION)
+
+              trivy --cache-dir "$(TRIVY_CACHE_DIR)" image --download-db-only
+
+              trivy sbom \
+                --cache-dir "$(TRIVY_CACHE_DIR)" \
+                --severity HIGH,CRITICAL \
+                --exit-code 1 \
+                --format json \
+                --output trivy-sbom.json \
+                sbom.json
+            displayName: SCA - Trivy SBOM Scan
 
           # Publish Trivy SCA Report
           - task: PublishPipelineArtifact@1
@@ -267,17 +237,9 @@ stages:
   # -------------------------
   # Stage 4 — Deploy to Staging (CD Non-Prod)
   # -------------------------
-
   - stage: Deploy_Staging
     displayName: Deploy to Staging
     dependsOn: Security
-    condition: and(
-        succeeded(),
-        or(
-          eq(variables['Build.SourceBranch'], 'refs/heads/staging'),
-          eq(variables['Build.Reason'], 'Manual')
-        )
-      )
     jobs:
       - deployment: FrontendStaging
         displayName: Frontend - Deploy to Kelix Staging
