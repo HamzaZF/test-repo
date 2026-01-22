@@ -45,10 +45,13 @@ stages:
             inputs:
               versionSpec: $(NODE_VERSION)
 
-          - script: npm install -g pnpm@$(PNPM_VERSION)
+          - script: |
+              set -euo pipefail
+              npm install -g pnpm@$(PNPM_VERSION)
             displayName: Install pnpm $(PNPM_VERSION)
 
           - script: |
+              set -euo pipefail
               pnpm config set store-dir $(PNPM_STORE_PATH)
             displayName: Configure pnpm store
 
@@ -61,6 +64,7 @@ stages:
               cacheHitVar: CACHE_RESTORED
 
           - script: |
+              set -euo pipefail
               cd $(FRONTEND_APP_LOCATION)
               pnpm install --frozen-lockfile
               pnpm run lint -- --max-warnings=0
@@ -113,10 +117,13 @@ stages:
             inputs:
               versionSpec: $(NODE_VERSION)
 
-          - script: npm install -g pnpm@$(PNPM_VERSION)
+          - script: |
+              set -euo pipefail
+              npm install -g pnpm@$(PNPM_VERSION)
             displayName: Install pnpm $(PNPM_VERSION)
 
           - script: |
+              set -euo pipefail
               pnpm config set store-dir $(PNPM_STORE_PATH)
             displayName: Configure pnpm store
 
@@ -130,6 +137,7 @@ stages:
               cacheHitVar: CACHE_RESTORED
 
           - script: |
+              set -euo pipefail
               cd $(FRONTEND_APP_LOCATION)
               pnpm install --frozen-lockfile
             displayName: Install dependencies
@@ -138,6 +146,7 @@ stages:
           # SAST — Semgrep
           # -------------------------
           - script: |
+              set -euo pipefail
               pip install semgrep==$(SEMGREP_VERSION)
               cd $(FRONTEND_APP_LOCATION)
               semgrep --config=p/default --error --sarif --output semgrep.sarif
@@ -154,13 +163,14 @@ stages:
           # Secrets Scanning — Gitleaks
           # -------------------------
           - script: |
+              set -euo pipefail
               wget -q https://github.com/gitleaks/gitleaks/releases/download/v$(GITLEAKS_VERSION)/gitleaks_$(GITLEAKS_VERSION)_linux_x64.tar.gz
               tar -xzf gitleaks_$(GITLEAKS_VERSION)_linux_x64.tar.gz
               sudo mv gitleaks /usr/local/bin/gitleaks
 
               gitleaks dir \
                 $(Build.SourcesDirectory)/$(FRONTEND_APP_LOCATION) \
-                --no-git \
+                # --no-git \
                 --report-format sarif \
                 --report-path gitleaks.sarif \
                 --redact \
@@ -179,6 +189,7 @@ stages:
           # SBOM — CycloneDX (cdxgen)
           # -------------------------
           - script: |
+              set -euo pipefail
               cd $(FRONTEND_APP_LOCATION)
               npm install -g @cyclonedx/cdxgen@$(CDXGEN_VERSION)
               cdxgen -o sbom.json
@@ -209,7 +220,7 @@ stages:
               # tar -xzf trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
               # sudo mv trivy /usr/local/bin/trivy
               # sudo chmod +x /usr/local/bin/trivy
-
+              set -euo pipefail
               curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin v$(TRIVY_VERSION)
 
               cd $(FRONTEND_APP_LOCATION)
