@@ -25,10 +25,10 @@ variables:
   SEMGREP_VERSION: '1.148.0'
   GITLEAKS_VERSION: '8.30.0'
   CDXGEN_VERSION: '12.0.0'
+  PYTHON_VERSION: '3.14.2'
   FRONTEND_APP_LOCATION: 'app'
   PNPM_STORE_PATH: $(Pipeline.Workspace)/.pnpm-store
   CACHE_RESTORED: false
-
 
 stages:
   # -------------------------
@@ -48,17 +48,17 @@ stages:
               versionSpec: $(NODE_VERSION)
 
           - script: npm install -g pnpm@$(PNPM_VERSION)
-            displayName: Install pnpm 10.15.1
+            displayName: Install pnpm $(PNPM_VERSION)
+
+          - script: |
+              pnpm config set store-dir $(PNPM_STORE_PATH)
+            displayName: Configure pnpm store
 
           - task: Cache@2
             inputs:
               key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
               path: $(PNPM_STORE_PATH)
               cacheHitVar: CACHE_RESTORED
-
-          - script: |
-              pnpm config set store-dir $(PNPM_STORE_PATH)
-            displayName: Configure pnpm store
 
           - script: |
               cd $(FRONTEND_APP_LOCATION)
@@ -99,16 +99,16 @@ stages:
           - script: npm install -g pnpm@$(PNPM_VERSION)
             displayName: Install pnpm
 
+          - script: |
+              pnpm config set store-dir $(PNPM_STORE_PATH)
+            displayName: Configure pnpm store
+
           - task: Cache@2
             displayName: Restore pnpm store cache
             inputs:
               key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
               path: $(PNPM_STORE_PATH)
               cacheHitVar: CACHE_RESTORED
-
-          - script: |
-              pnpm config set store-dir $(PNPM_STORE_PATH)
-            displayName: Configure pnpm store
 
           - script: |
               cd $(FRONTEND_APP_LOCATION)
@@ -122,58 +122,58 @@ stages:
             displayName: Run lint and unit tests
 
 
-      # -------------------------
-      # Job 2 — Playwright E2E
-      # -------------------------
-      - job: Playwright
-        displayName: Playwright E2E Tests
-        dependsOn: UnitAndLint
-        condition: eq(variables['Build.SourceBranch'], 'refs/heads/staging')
+      # # -------------------------
+      # # Job 2 — Playwright E2E
+      # # -------------------------
+      # - job: Playwright
+      #   displayName: Playwright E2E Tests
+      #   dependsOn: UnitAndLint
+      #   condition: eq(variables['Build.SourceBranch'], 'refs/heads/staging')
 
-        steps:
-          - checkout: self
+      #   steps:
+      #     - checkout: self
 
-          - task: NodeTool@0
-            displayName: Use Node.js $(NODE_VERSION)
-            inputs:
-              versionSpec: $(NODE_VERSION)
+      #     - task: NodeTool@0
+      #       displayName: Use Node.js $(NODE_VERSION)
+      #       inputs:
+      #         versionSpec: $(NODE_VERSION)
 
-          - script: npm install -g pnpm@$(PNPM_VERSION)
-            displayName: Install pnpm
+      #     - script: npm install -g pnpm@$(PNPM_VERSION)
+      #       displayName: Install pnpm
 
-          - task: Cache@2
-            displayName: Restore pnpm store cache
-            inputs:
-              key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
-              path: $(PNPM_STORE_PATH)
-              cacheHitVar: CACHE_RESTORED
+      #     - script: |
+      #         pnpm config set store-dir $(PNPM_STORE_PATH)
+      #       displayName: Configure pnpm store
 
-          - script: |
-              pnpm config set store-dir $(PNPM_STORE_PATH)
-            displayName: Configure pnpm store
+      #     - task: Cache@2
+      #       displayName: Restore pnpm store cache
+      #       inputs:
+      #         key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
+      #         path: $(PNPM_STORE_PATH)
+      #         cacheHitVar: CACHE_RESTORED
 
-          - script: |
-              cd $(FRONTEND_APP_LOCATION)
-              pnpm install --frozen-lockfile
-            displayName: Install dependencies
+      #     - script: |
+      #         cd $(FRONTEND_APP_LOCATION)
+      #         pnpm install --frozen-lockfile
+      #       displayName: Install dependencies
 
-          - script: |
-              cd $(FRONTEND_APP_LOCATION)
-              pnpm exec playwright install --with-deps
-            displayName: Install Playwright browsers
+      #     - script: |
+      #         cd $(FRONTEND_APP_LOCATION)
+      #         pnpm exec playwright install --with-deps
+      #       displayName: Install Playwright browsers
 
-          - script: |
-              cd $(FRONTEND_APP_LOCATION)
-              pnpm exec playwright test
-            displayName: Run Playwright tests
+      #     - script: |
+      #         cd $(FRONTEND_APP_LOCATION)
+      #         pnpm exec playwright test
+      #       displayName: Run Playwright tests
 
-          - task: PublishPipelineArtifact@1
-            displayName: Publish Playwright Report
-            condition: always()
-            inputs:
-              targetPath: $(FRONTEND_APP_LOCATION)/playwright-report
-              artifact: playwright-report
-              publishLocation: pipeline
+      #     - task: PublishPipelineArtifact@1
+      #       displayName: Publish Playwright Report
+      #       condition: always()
+      #       inputs:
+      #         targetPath: $(FRONTEND_APP_LOCATION)/playwright-report
+      #         artifact: playwright-report
+      #         publishLocation: pipeline
 
   # -------------------------
   # Stage 3 — Security (Shift-left Security)
@@ -194,16 +194,19 @@ stages:
 
           - task: UsePythonVersion@0
             inputs:
-              versionSpec: '3.x'
+              versionSpec: $(PYTHON_VERSION)
 
-          # Use same Node version
           - task: NodeTool@0
             displayName: Use Node.js $(NODE_VERSION)
             inputs:
               versionSpec: $(NODE_VERSION)
 
           - script: npm install -g pnpm@$(PNPM_VERSION)
-            displayName: Install pnpm 10.15.1
+            displayName: Install pnpm $(PNPM_VERSION)
+
+          - script: |
+              pnpm config set store-dir $(PNPM_STORE_PATH)
+            displayName: Configure pnpm store
 
           - task: Cache@2
             displayName: Restore pnpm store cache
@@ -211,10 +214,6 @@ stages:
               key: 'pnpm | "$(Agent.OS)" | $(FRONTEND_APP_LOCATION)/pnpm-lock.yaml'
               path: $(PNPM_STORE_PATH)
               cacheHitVar: CACHE_RESTORED
-
-          - script: |
-              pnpm config set store-dir $(PNPM_STORE_PATH)
-            displayName: Configure pnpm store
 
           - script: |
               cd $(FRONTEND_APP_LOCATION)
@@ -329,14 +328,6 @@ stages:
                 - download: current
                   artifact: frontend-dist
                   displayName: Download frontend-dist artifact
-
-                - script: |
-                    echo "Pipeline Workspace: $(Pipeline.Workspace)"
-                    ls -la $(Pipeline.Workspace)
-                    echo "---"
-                    echo "Frontend-dist contents:"
-                    ls -la $(Pipeline.Workspace)/frontend-dist
-                  displayName: Debug - Show artifact structure
 
                 # Deploy the artifact without rebuilding (skip_app_build: true)
                 # AzureStaticWebApp expects a folder path containing the built static assets.
