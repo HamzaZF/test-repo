@@ -203,33 +203,14 @@ stages:
           # SCA — Trivy (Scan SBOM)
           # -------------------------
 
-          # - task: Cache@2
-          #   displayName: Restore Trivy cache
-          #   inputs:
-          #     key: 'trivy | "$(Agent.OS)" | v$(TRIVY_VERSION)'
-          #     restoreKeys: |
-          #       trivy | "$(Agent.OS)"
-          #     path: $(TRIVY_CACHE_DIR)
+          # TODO: cache the db
             
           - script: |
-              # wget -q https://github.com/aquasecurity/trivy/releases/download/v$(TRIVY_VERSION)/trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
-              # tar -xzf trivy_$(TRIVY_VERSION)_Linux-64bit.tar.gz
-              # sudo mv trivy /usr/local/bin/trivy
-              # sudo chmod +x /usr/local/bin/trivy
               set -euo pipefail
               curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin v$(TRIVY_VERSION)
 
               cd $(FRONTEND_APP_LOCATION)
 
-              # trivy --cache-dir "$(TRIVY_CACHE_DIR)" --download-db-only
-
-              # trivy sbom \
-              #   --cache-dir "$(TRIVY_CACHE_DIR)" \
-              #   --severity HIGH,CRITICAL \
-              #   --exit-code 1 \
-              #   --format json \
-              #   --output trivy-sbom.json \
-              #   sbom.json
               trivy sbom \
                 --severity HIGH,CRITICAL \
                 --exit-code 1 \
