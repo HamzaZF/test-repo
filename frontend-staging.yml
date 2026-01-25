@@ -219,15 +219,15 @@ stages:
               --severity HIGH,CRITICAL \
               --exit-code 1 \
               --scanners vuln \
-              --format json \
-              --output trivy-results.json .
+              --format sarif \
+              --output trivy-results.sarif .
             displayName: SCA - Trivy SBOM Scan
 
           # Publish Trivy SCA Report
           - task: PublishPipelineArtifact@1
             displayName: Publish Trivy SCA Report
             inputs:
-              targetPath: $(FRONTEND_APP_LOCATION)/trivy-sbom.json
+              targetPath: $(FRONTEND_APP_LOCATION)/trivy-results.sarif
               artifact: trivy-sca
               publishLocation: pipeline
 
