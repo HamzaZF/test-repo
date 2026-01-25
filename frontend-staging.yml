@@ -16,7 +16,7 @@ pool:
   vmImage: ubuntu-24.04
 
 variables:
-  NODE_VERSION: '24.13.0'
+  NODE_VERSION: '24.x'
   PNPM_VERSION: '10.15.1'
   TRIVY_VERSION: '0.68.2'
   SEMGREP_VERSION: '1.148.0'
@@ -89,6 +89,10 @@ stages:
     jobs:
       - job: IntegrationTests
         displayName: Integration Testing
+        steps:
+          - script: |
+              echo "TODO: integration testing"
+              displayName: Placeholder
         #TODO
   # -------------------------
   # Stage 3 — Security (Shift-left Security)
