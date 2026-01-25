@@ -80,8 +80,6 @@ stages:
               artifact: frontend-dist
               publishLocation: pipeline
 
-
-
   # -------------------------
   # Stage 2 — Test (CI Quality Gate)
   # -------------------------
@@ -91,7 +89,7 @@ stages:
     jobs:
       - job: IntegrationTests
         displayName: Integration Testing
-
+        #TODO
   # -------------------------
   # Stage 3 — Security (Shift-left Security)
   #   - SAST (Static Application Security Testing)
@@ -170,7 +168,6 @@ stages:
 
               gitleaks dir \
                 $(Build.SourcesDirectory)/$(FRONTEND_APP_LOCATION) \
-                # --no-git \
                 --report-format sarif \
                 --report-path gitleaks.sarif \
                 --redact \
@@ -224,7 +221,7 @@ stages:
 
               cd $(FRONTEND_APP_LOCATION)
 
-              trivy --cache-dir "$(TRIVY_CACHE_DIR)" image --download-db-only
+              trivy --cache-dir "$(TRIVY_CACHE_DIR)" --download-db-only
 
               trivy sbom \
                 --cache-dir "$(TRIVY_CACHE_DIR)" \
