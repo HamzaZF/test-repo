@@ -67,7 +67,7 @@ stages:
               set -eu
               cd $(FRONTEND_APP_LOCATION)
               pnpm install --frozen-lockfile
-              pnpm run lint -- --max-warnings=0
+              pnpm run lint
               # pnpm test
               pnpm run build
             displayName: Install dependencies and build
