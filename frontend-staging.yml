@@ -155,12 +155,12 @@ stages:
               semgrep --config=p/default --error --sarif --output semgrep.sarif
             displayName: SAST - Semgrep Scan
 
-          - task: PublishPipelineArtifact@1
-            displayName: Publish Semgrep SARIF
-            inputs:
-              targetPath: $(FRONTEND_APP_LOCATION)/semgrep.sarif
-              artifact: semgrep-sarif
-              publishLocation: pipeline
+          # - task: PublishPipelineArtifact@1
+          #   displayName: Publish Semgrep SARIF
+          #   inputs:
+          #     targetPath: $(FRONTEND_APP_LOCATION)/semgrep.sarif
+          #     artifact: semgrep-sarif
+          #     publishLocation: pipeline
 
           # -------------------------
           # Secrets Scanning — Gitleaks
@@ -180,11 +180,11 @@ stages:
 
             displayName: Secrets Scan - Gitleaks
 
-          - task: PublishPipelineArtifact@1
-            displayName: Publish Gitleaks Report
-            inputs:
-              targetPath: gitleaks.sarif
-              artifact: gitleaks-sarif
+          # - task: PublishPipelineArtifact@1
+          #   displayName: Publish Gitleaks Report
+          #   inputs:
+          #     targetPath: gitleaks.sarif
+          #     artifact: gitleaks-sarif
 
           # -------------------------
           # SBOM — CycloneDX (cdxgen)
@@ -224,13 +224,29 @@ stages:
               --output trivy-results.sarif .
             displayName: SCA - Trivy FS Scan (SARIF)
 
-          # Publish Trivy SCA Report
+          # # Publish Trivy SCA Report
+          # - task: PublishPipelineArtifact@1
+          #   displayName: Publish Trivy SCA Report
+          #   inputs:
+          #     targetPath: $(FRONTEND_APP_LOCATION)/trivy-results.sarif
+          #     artifact: trivy-sca
+          #     publishLocation: pipeline
+
+          - script: |
+              set -eu
+              mkdir -p $(Build.ArtifactStagingDirectory)/code-analysis
+              cp $(FRONTEND_APP_LOCATION)/semgrep.sarif $(Build.ArtifactStagingDirectory)/code-analysis/
+              cp gitleaks.sarif $(Build.ArtifactStagingDirectory)/code-analysis/
+              cp $(FRONTEND_APP_LOCATION)/trivy-results.sarif $(Build.ArtifactStagingDirectory)/code-analysis/
+            displayName: Collect SARIF files for Scans tab
+
           - task: PublishPipelineArtifact@1
-            displayName: Publish Trivy SCA Report
+            displayName: Publish CodeAnalysisLogs (for Scans tab)
             inputs:
-              targetPath: $(FRONTEND_APP_LOCATION)/trivy-results.sarif
-              artifact: trivy-sca
+              targetPath: $(Build.ArtifactStagingDirectory)/code-analysis
+              artifact: CodeAnalysisLogs
               publishLocation: pipeline
+
 
 
   # -------------------------
