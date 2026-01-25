@@ -94,6 +94,7 @@ stages:
               echo "TODO: integration testing"
             displayName: Placeholder
         #TODO
+        
   # -------------------------
   # Stage 3 — Security (Shift-left Security)
   #   - SAST (Static Application Security Testing)
@@ -171,7 +172,7 @@ stages:
               sudo mv gitleaks /usr/local/bin/gitleaks
 
               gitleaks dir \
-                $(Build.SourcesDirectory)/$(FRONTEND_APP_LOCATION) \
+                $(Build.SourcesDirectory) \
                 --report-format sarif \
                 --report-path gitleaks.sarif \
                 --redact \
