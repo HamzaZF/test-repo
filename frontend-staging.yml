@@ -151,7 +151,7 @@ stages:
               set -eu
               pip install semgrep==$(SEMGREP_VERSION)
               cd $(FRONTEND_APP_LOCATION)
-              semgrep --config=p/ci --error --sarif --output semgrep.sarif
+              semgrep --config=p/default --error --sarif --output semgrep.sarif
             displayName: SAST - Semgrep Scan
 
           - task: PublishPipelineArtifact@1
@@ -215,12 +215,12 @@ stages:
 
               cd $(FRONTEND_APP_LOCATION)
 
-              trivy sbom \
-                --severity HIGH,CRITICAL \
-                --exit-code 1 \
-                --format json \
-                --output trivy-sbom.json \
-                sbom.json
+              trivy fs \
+              --severity HIGH,CRITICAL \
+              --exit-code 1 \
+              --scanners vuln \
+              --format json \
+              --output trivy-results.json .
             displayName: SCA - Trivy SBOM Scan
 
           # Publish Trivy SCA Report
