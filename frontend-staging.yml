@@ -173,6 +173,7 @@ stages:
 
               gitleaks dir \
                 $(Build.SourcesDirectory) \
+                --no-git \
                 --report-format sarif \
                 --report-path gitleaks.sarif \
                 --redact \
