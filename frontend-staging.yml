@@ -221,7 +221,7 @@ stages:
               --scanners vuln \
               --format sarif \
               --output trivy-results.sarif .
-            displayName: SCA - Trivy SBOM Scan
+            displayName: SCA - Trivy FS Scan (SARIF)
 
           # Publish Trivy SCA Report
           - task: PublishPipelineArtifact@1
