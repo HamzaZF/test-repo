@@ -30,7 +30,7 @@ variables:
 
 stages:
   # -------------------------
-  # Stage 1 — Build (CI Build)
+  # Stage 1 — Build
   # -------------------------
   - stage: Build
     displayName: Build
@@ -81,7 +81,7 @@ stages:
               publishLocation: pipeline
 
   # -------------------------
-  # Stage 2 — Test (CI Quality Gate)
+  # Stage 2 — Test
   # -------------------------
   - stage: Test
     displayName: Test
@@ -233,7 +233,7 @@ stages:
 
 
   # -------------------------
-  # Stage 4 — Deploy to Staging (CD Non-Prod)
+  # Stage 4 — Deploy to Staging
   # -------------------------
   - stage: Deploy_Staging
     displayName: Deploy to Staging
