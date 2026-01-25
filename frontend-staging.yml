@@ -154,6 +154,7 @@ stages:
               cd $(FRONTEND_APP_LOCATION)
               semgrep --config=p/default --error --sarif --output semgrep.sarif
             displayName: SAST - Semgrep Scan
+            continueOnError: true
 
           # - task: PublishPipelineArtifact@1
           #   displayName: Publish Semgrep SARIF
@@ -178,8 +179,8 @@ stages:
                 --report-path gitleaks.sarif \
                 --redact \
                 --exit-code 1
-
             displayName: Secrets Scan - Gitleaks
+            continueOnError: true
 
           # - task: PublishPipelineArtifact@1
           #   displayName: Publish Gitleaks Report
@@ -224,6 +225,7 @@ stages:
               --format sarif \
               --output trivy-results.sarif .
             displayName: SCA - Trivy FS Scan (SARIF)
+            continueOnError: true
 
           # # Publish Trivy SCA Report
           # - task: PublishPipelineArtifact@1
@@ -247,6 +249,14 @@ stages:
               targetPath: $(Build.ArtifactStagingDirectory)/code-analysis
               artifact: CodeAnalysisLogs
               publishLocation: pipeline
+
+          - script: |
+              if [ "$(Agent.JobStatus)" = "SucceededWithIssues" ]; then
+                echo "One or more security scans failed."
+                exit 1
+              fi
+            displayName: Final Security Gate
+            condition: always()
 
 
 
