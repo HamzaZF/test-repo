@@ -92,7 +92,7 @@ stages:
         steps:
           - script: |
               echo "TODO: integration testing"
-              displayName: Placeholder
+            displayName: Placeholder
         #TODO
   # -------------------------
   # Stage 3 — Security (Shift-left Security)
